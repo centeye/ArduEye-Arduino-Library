@@ -1,0 +1,37 @@
+#######################################
+# Syntax Coloring Map for WiFlySerial
+#######################################
+
+#######################################
+# Datatypes (KEYWORD1)
+#######################################
+ArduEye	KEYWORD1
+
+#######################################
+# Methods and Functions (KEYWORD2)
+#######################################
+begin	KEYWORD2
+startDataStream	KEYWORD2
+stopDataStream	KEYWORD2
+getData	KEYWORD2
+dataRdy	KEYWORD2
+calibrate	KEYWORD2
+setResoultion	KEYWORD2
+setOFResolution	KEYWORD2
+setOFSmoothing	KEYWORD2
+sendComand	KEYWORD2
+checkUIData	KEYWORD2
+enableSerialTx	KEYWORD2
+setSerialMonitorMode	KEYWORD2
+RawImage	KEYWORD2
+OpticFlowX	KEYWORD2
+OpticFlowY	KEYWORD2
+FPS	KEYWORD2
+
+#######################################
+# Constants (LITERAL1)
+#######################################
+ARDUEYE_ID_RAW	LITERAL1
+ARDUEYE_ID_OFX	LITERAL1
+ARDUEYE_ID_OFY	LITERAL1
+ARDUEYE_ID_FPS	LITERAL1
