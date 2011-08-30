@@ -115,15 +115,26 @@ boolean ArduEye::CheckBufferFull()
 {
     int BytesReceived = 0;
     int Count = 0;
+    char inByte;
+    
+    Serial.print((char)GO_CHAR);
     
     while(Count < 512)
     {
-        Serial.print((char)GO_CHAR);
         while(BytesReceived == 0)
             BytesReceived = Serial.available();
         
-        if(Serial.read() == ACK_CHAR)
+        inByte = Serial.read();
+        
+        if(inByte == ACK_CHAR)
             return true;
+        
+        else if(inByte == START_PCKT)
+            checkUIData(true);
+        
+        Serial.print((char)(START_PCKT));
+        Serial.print((char)(GO_CHAR));
+        Serial.print((char)(END_PCKT));
         
         Count++;
     }
@@ -177,32 +188,32 @@ void ArduEye::getData()
         {
            if(_SerialMonitorMode)
            {    
-               if(CheckBufferFull())
-               {
                    Serial.println(_DS[_ActiveSets[k]].DSID);
                    Serial.println(Header[0], DEC);
                    Serial.println(Rows, DEC);
                    Serial.println(Cols, DEC);
                    Serial.println(_DS[_ActiveSets[k]].DisplayType);
                    Serial.println(" ");
-               }
             }
             else
             {
                 if(CheckBufferFull())
                 {
                     Serial.print((char)START_PCKT);  // send start of packet byte
-                    Serial.print(Header[0] + 1); // send packet ID (HeaderID = DSID + 1)
                     for(i = 0; i < FULL_HEAD_SIZE; i++) // send header packet data
+                    {
                         Serial.print(Header[i]);
-                    Serial.print(_DS[_ActiveSets[k]].DisplayType); // append display type
+                        if((Header[i] == GO_CHAR) || (Header[i] == START_PCKT) || (Header[i] == END_PCKT))
+                            Serial.print(Header[i]);
+                    }
+                    Serial.print((char)(_DS[_ActiveSets[k]].DisplayType)); // append display type
                     Serial.print((char)END_PCKT);  //send end of packet byte   
                 }
             }
          }
         
         // abort read if size data is incorrect
-        if((InSize <= 0) || (InSize > _DS[_ActiveSets[k]].MaxSize))
+        if(InSize <= 0)
             break;
           
           // send start of packet bytes
@@ -216,7 +227,7 @@ void ArduEye::getData()
               else  // print to UI mode
               {
                   Serial.print((char)START_PCKT); // send start of packet byte
-                  Serial.print(_DS[_ActiveSets[k]].DSID); // send dataset ID
+                  Serial.print((char)(_DS[_ActiveSets[k]].DSID)); // send dataset ID
               }
           }
       
@@ -244,7 +255,11 @@ void ArduEye::getData()
               if (_SerialTx)
               {   	
                  for (i = 0; i < MAX_PACKET_SIZE; i++)
-                      Serial.print(_DS[_ActiveSets[k]].Array[i]);
+                 {
+                     Serial.print(_DS[_ActiveSets[k]].Array[i]);
+                     if((_DS[_ActiveSets[k]].Array[i] == GO_CHAR) || (_DS[_ActiveSets[k]].Array[i] == START_PCKT) || (_DS[_ActiveSets[k]].Array[i] == END_PCKT))
+                         Serial.print(_DS[_ActiveSets[k]].Array[i]);
+                 }
                   if(_SerialMonitorMode)
                       Serial.println(" ");
                   
@@ -266,7 +281,11 @@ void ArduEye::getData()
               if (_SerialTx)
               {   	
                   for (i = 0; i < remaining; i++)
+                  {
                       Serial.print(_DS[_ActiveSets[k]].Array[i]);
+                      if((_DS[_ActiveSets[k]].Array[i] == GO_CHAR) || (_DS[_ActiveSets[k]].Array[i] == START_PCKT) || (_DS[_ActiveSets[k]].Array[i] == END_PCKT))
+                          Serial.print(_DS[_ActiveSets[k]].Array[i]);
+                  }
                   if(_SerialMonitorMode)
                       Serial.println(" ");
                   
@@ -388,18 +407,25 @@ short ArduEye::FPS()
 }
 
 // check for communication from UI and pass commands on to ArduEye
-void ArduEye::checkUIData()
+void ArduEye::checkUIData(bool StartReceived)
 {
 	int i, StartIdx, EndIdx, CmdBytes;
 	int BytesReceived = Serial.available();
 	char InByte[MAX_IN_SERIAL];
+    int offset = 0;
   
 	if(BytesReceived)
 	{
+        if(StartReceived)
+        {
+            InByte[0] = START_PCKT;
+            offset = 1;
+        }
+        
 		delay(50);
 		BytesReceived = Serial.available();
 		for (i = 0; i < BytesReceived; i++)
-	    	InByte[i] = Serial.read();
+	    	InByte[i+offset] = Serial.read();
         
 	  StartIdx = EndIdx = 0;
 	  while(StartIdx < BytesReceived)

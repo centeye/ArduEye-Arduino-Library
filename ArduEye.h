@@ -83,7 +83,7 @@ public:
     
     void SetDisplayType(int DSID, int DisplayType);
 	
-	void checkUIData();
+	void checkUIData(bool StartReceived = false);
 	
 	void enableSerialTx(boolean Enable);
 	void setSerialMonitorMode(boolean Enable);
