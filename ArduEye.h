@@ -17,8 +17,10 @@
 #define STOP_CMD 35
 #define ACK_CHAR 34
 #define GO_CHAR 36
+#define CMD_ACK 37
 
 #define MAX_IN_SERIAL	40
+#define MAX_CMD_SIZE    10
 
 // start packet flags
 #define ESC_CHAR	  38 //0xFF
@@ -40,6 +42,8 @@
 #define DISPLAY_CHARTX 2
 #define DISPLAY_CHARTY 3
 #define DISPLAY_TEXT 4
+#define DISPLAY_DUMP 5
+#define DISPLAY_POINTS 6
 
 #define NULL_DS       -1
 
@@ -83,7 +87,8 @@ public:
     
     void SetDisplayType(int DSID, int DisplayType);
 	
-	void checkUIData(bool StartReceived = false);
+	bool checkUIData();
+    void ParseCmd(int StartIdx, int EndIdx);
 	
 	void enableSerialTx(boolean Enable);
 	void setSerialMonitorMode(boolean Enable);
@@ -91,7 +96,11 @@ public:
 	char RawImage[ARDUEYE_RAW_SIZE];
 	char OpticFlowX[ARDUEYE_OF_SIZE];
 	char OpticFlowY[ARDUEYE_OF_SIZE];
+    char CMD[ARDUEYE_VAL_SIZE];
+    char Maxes[ARDUEYE_MAXES_SIZE];
 	short FPS();	
+    
+    bool Toggle, Toggle2;
 	
 private:
 	int _dataReadyPin;
@@ -102,6 +111,8 @@ private:
 	char _FPS[ARDUEYE_FPS_SIZE];
 	boolean _SerialTx;
 	boolean _SerialMonitorMode;
+    char _InBuffer[MAX_IN_SERIAL];
+    int _InSIdx, _ESCReceived, _InBufIdx, _BufEnd;
 		
 };
 
