@@ -10,7 +10,7 @@
 
 ArduEye::ArduEye()
 {
-	_SerialTx = true;
+	_SerialTx = false;
 	_SerialMonitorMode = false;
     _NumActiveSets = 0;
     _InSIdx = _InBufIdx = 0;
@@ -32,6 +32,7 @@ void ArduEye::begin(int RdyPin, int CSPin)
     digitalWrite(7,LOW);
 	
 	Serial.begin(115200);
+    
 	
 	// start the SPI library:
 	  SPI.setClockDivider(SPI_CLOCK_DIV4);
@@ -46,33 +47,21 @@ void ArduEye::begin(int RdyPin, int CSPin)
 	  
     // initialize data set record
 	  _DS[0].DSID = ARDUEYE_ID_RAW;
-	  _DS[0].Array = RawImage;
-	  _DS[0].MaxSize = ARDUEYE_RAW_SIZE;
       _DS[0].DisplayType = DISPLAY_GRAYSCALE_IMAGE;
     
 	  _DS[1].DSID = ARDUEYE_ID_OFX;
-	  _DS[1].Array = OpticFlowX;
-	  _DS[1].MaxSize = ARDUEYE_OF_SIZE;
       _DS[1].DisplayType = DISPLAY_CHARTX;
 	  
 	  _DS[2].DSID = ARDUEYE_ID_OFY;
-	  _DS[2].Array = OpticFlowY;
-	  _DS[2].MaxSize = ARDUEYE_OF_SIZE;
       _DS[2].DisplayType = DISPLAY_CHARTY;
 	  
 	  _DS[3].DSID = ARDUEYE_ID_FPS;
-	  _DS[3].Array = _FPS;
-	  _DS[3].MaxSize = ARDUEYE_FPS_SIZE;
       _DS[3].DisplayType = DISPLAY_TEXT;
     
       _DS[4].DSID = ARDUEYE_ID_CMD;
-      _DS[4].Array = CMD;
-      _DS[4].MaxSize = ARDUEYE_VAL_SIZE;
       _DS[4].DisplayType = DISPLAY_DUMP;
         
       _DS[5].DSID = ARDUEYE_ID_MAXES;
-      _DS[5].Array = Maxes;
-      _DS[5].MaxSize = ARDUEYE_MAXES_SIZE;
       _DS[5].DisplayType = DISPLAY_POINTS;
 	 	
 }
@@ -143,7 +132,7 @@ void ArduEye::stopDataStream(char DataSet)
 }
 
 // check that serial buffer is not full, so it is OK to send data
-boolean ArduEye::CheckBufferFull()
+boolean ArduEye::checkBufferFull()
 {
     int BytesReceived = 0;
     int Count = 0, CycleCount = 0;
@@ -184,7 +173,6 @@ boolean ArduEye::CheckBufferFull()
 void ArduEye::getData()
 {
 	int i, k, InSize, Rows, Cols, c, Idx, remaining;
-	boolean EODS = false;
 	unsigned char Header[FULL_HEAD_SIZE];
    //Header: 1 byte DataId, 2 byte rows, 2 byte cols
       
@@ -221,7 +209,7 @@ void ArduEye::getData()
         {
            if(_SerialMonitorMode)
            { 
-               if(CheckBufferFull())
+               if(checkBufferFull())
                {
                    Serial.print(_DS[_ActiveSets[k]].DSID); Serial.print(" ");
                    Serial.print(Rows, DEC); Serial.print(" ");
@@ -232,7 +220,7 @@ void ArduEye::getData()
             }
             else
             {
-                if(CheckBufferFull())
+                if(checkBufferFull())
                 {
                     Serial.print((char)ESC_CHAR);
                     Serial.print((char)START_PCKT);  // send start of packet byte
@@ -285,46 +273,49 @@ void ArduEye::getData()
         
         SPI.transfer(ESC_CHAR);
         SPI.transfer(READ_CHAR);
-         delayMicroseconds(1);
-          Idx = 0;
-          while(Idx + MAX_PACKET_SIZE < InSize)
-          {
-             for(i = 0; i < MAX_PACKET_SIZE; i++)
-               _DS[_ActiveSets[k]].Array[i] = SPI.transfer(0x00);
-              
-              if (_SerialTx)
-              {   	
-                 for (i = 0; i < MAX_PACKET_SIZE; i++)
-                 {
-                     Serial.print(_DS[_ActiveSets[k]].Array[i]);
-                     if(_DS[_ActiveSets[k]].Array[i] == ESC_CHAR)
-                         Serial.print(_DS[_ActiveSets[k]].Array[i]);
-                 }
-                  if(_SerialMonitorMode)
-                      Serial.println(" ");
-                  
-                  if(Idx % (MAX_PACKET_SIZE * 2) == 0)
-                  {     
-                      if(!CheckBufferFull())
-                          break;
-                  }
-              }
-              Idx+= MAX_PACKET_SIZE;
+        delayMicroseconds(1);
+        Idx = 0;
+        while(Idx + MAX_SPI_PCKT_SIZE < InSize)
+        {
+            for(i = 0; i < MAX_SPI_PCKT_SIZE; i++)
+                _ReceiveBuffer[i] = SPI.transfer(0x00);
+            
+            if (_SerialTx)
+            {   	
+                for (i = 0; i < MAX_SPI_PCKT_SIZE; i++)
+                {
+                    Serial.print(_ReceiveBuffer[i]);
+                    if(_ReceiveBuffer[i] == ESC_CHAR)
+                        Serial.print(_ReceiveBuffer[i]);
+                }
+                if(_SerialMonitorMode)
+                    Serial.println(" ");
+                
+                if(Idx % (MAX_SPI_PCKT_SIZE * 2) == 0)
+                {     
+                    if(!checkBufferFull())
+                        break;
+                }
+            }
+            Idx+= MAX_SPI_PCKT_SIZE;
           }
           remaining = InSize - Idx;
         
           if(remaining)
           {
               for(i = 0; i < remaining; i++)
-                  _DS[_ActiveSets[k]].Array[i] = SPI.transfer(0x00);
+              {
+                  delayMicroseconds(1);
+                  _ReceiveBuffer[i] = SPI.transfer(0x00);
+              }
               
               if (_SerialTx)
               {   	
                   for (i = 0; i < remaining; i++)
                   {
-                      Serial.print(_DS[_ActiveSets[k]].Array[i]);
-                      if(_DS[_ActiveSets[k]].Array[i] == ESC_CHAR)
-                          Serial.print(_DS[_ActiveSets[k]].Array[i]);
+                      Serial.print(_ReceiveBuffer[i]);
+                      if(_ReceiveBuffer[i] == ESC_CHAR)
+                          Serial.print(_ReceiveBuffer[i]);
                   }
                   if(_SerialMonitorMode)
                       Serial.println(" ");
@@ -349,7 +340,188 @@ void ArduEye::getData()
                   
           }        
   } 
-    //send End of Data Indicator
+  endFrame();
+}
+int ArduEye::getDisplayType(char DataSet)
+{
+    for(int i = 0; i < MAX_DATASETS; i++)
+    {
+        if(_DS[i].DSID == DataSet)
+           return _DS[i].DisplayType;
+    }
+           
+    return 0;
+}
+void ArduEye::getDataSet(char DataSet, char *Buf)
+{
+    int i, k, InSize, Rows, Cols, c, Idx, remaining;
+	unsigned char Header[FULL_HEAD_SIZE];
+    //Header: 1 byte DataId, 2 byte rows, 2 byte cols
+    
+    int DisplayType = getDisplayType(DataSet);
+    
+
+    // read data packet header
+    digitalWrite(_chipSelectPin, LOW);
+    SPI.transfer(ESC_CHAR);
+    SPI.transfer(WRITE_CHAR);
+    
+    SPI.transfer(ESC_CHAR);
+    SPI.transfer(START_PCKT);
+    SPI.transfer(SOH_CHAR); 
+    SPI.transfer(DataSet);
+    SPI.transfer(ESC_CHAR);
+    SPI.transfer(END_PCKT);
+    
+    SPI.transfer(ESC_CHAR);
+    SPI.transfer(READ_CHAR);
+    delayMicroseconds(1);
+    for (i = 0; i < FULL_HEAD_SIZE; i++)
+        Header[i] = SPI.transfer(0x00);
+    digitalWrite(_chipSelectPin, HIGH);
+    
+    // assign row and colum data for serial display      
+    Rows = (Header[1] << 8) + Header[2];
+    Cols = (Header[3] << 8) + Header[4];
+    InSize = Rows * Cols;
+    
+    
+    // write header data to serial monitor / UI if active
+    if(_SerialTx)
+    {
+        if(_SerialMonitorMode)
+        { 
+            if(checkBufferFull())
+            {
+                Serial.print(DataSet); Serial.print(" ");
+                Serial.print(Rows, DEC); Serial.print(" ");
+                Serial.print(Cols, DEC);Serial.print(" ");
+                Serial.print(DisplayType); Serial.print(" ");
+                Serial.println(" ");
+            }
+        }
+        else
+        {
+            if(checkBufferFull())
+            {
+                Serial.print((char)ESC_CHAR);
+                Serial.print((char)START_PCKT);  // send start of packet byte
+                for(i = 0; i < FULL_HEAD_SIZE; i++) // send header packet data
+                {
+                    Serial.print(Header[i]);
+                    if(Header[i] == ESC_CHAR)
+                        Serial.print(Header[i]);
+                }
+                Serial.print((char)DisplayType); // append display type
+                Serial.print((char)ESC_CHAR);
+                Serial.print((char)END_PCKT);  //send end of packet byte   
+            }
+        }
+    }
+    
+    // abort read if size data is incorrect
+    if(InSize <= 0)
+        return;
+    
+    // send start of packet bytes
+    if(_SerialTx)
+    {
+        if(_SerialMonitorMode) // print to serial monitor mode
+        {
+            Serial.print(ESC_CHAR);
+            Serial.print(START_PCKT);
+            Serial.println(DataSet,DEC);
+        }
+        else  // print to UI mode
+        {
+            Serial.print((char)ESC_CHAR); 
+            Serial.print((char)START_PCKT); // send start of packet byte
+            Serial.print((char)DataSet); // send dataset ID
+        }
+    }
+    
+    // read data packet 
+    digitalWrite(_chipSelectPin, LOW);
+    SPI.transfer(ESC_CHAR);
+    SPI.transfer(WRITE_CHAR);
+    
+    SPI.transfer(ESC_CHAR);
+    SPI.transfer(START_PCKT);
+    SPI.transfer(SOD_CHAR); 
+    SPI.transfer(DataSet);
+    SPI.transfer(ESC_CHAR);
+    SPI.transfer(END_PCKT);
+    
+    SPI.transfer(ESC_CHAR);
+    SPI.transfer(READ_CHAR);
+    delayMicroseconds(1);
+    Idx = 0;
+    while(Idx + MAX_SPI_PCKT_SIZE < InSize)
+    {
+        for(i = 0; i < MAX_SPI_PCKT_SIZE; i++)
+            _ReceiveBuffer[i] = SPI.transfer(0x00);
+        
+        if (_SerialTx)
+        {   	
+            for (i = 0; i < MAX_SPI_PCKT_SIZE; i++)
+            {
+                Serial.print(_ReceiveBuffer[i]);
+                if(_ReceiveBuffer[i] == ESC_CHAR)
+                    Serial.print(_ReceiveBuffer[i]);
+            }
+            if(_SerialMonitorMode)
+                Serial.println(" ");
+            
+            if(Idx % (MAX_SPI_PCKT_SIZE * 2) == 0)
+            {     
+                if(!checkBufferFull())
+                    break;
+            }
+        }
+        Idx+= MAX_SPI_PCKT_SIZE;
+    }
+    remaining = InSize - Idx;
+    
+    if(remaining > 0)
+    {
+        for(i = 0; i < remaining; i++)
+            Buf[i] = SPI.transfer(0x00);
+        
+        if (_SerialTx)
+        {   	
+            for (i = 0; i < remaining; i++)
+            {
+                Serial.print(Buf[i]);
+                if(Buf[i] == ESC_CHAR)
+                    Serial.print(Buf[i]);
+            }
+            if(_SerialMonitorMode)
+                Serial.println(" ");
+            
+        } 
+    }
+    digitalWrite(_chipSelectPin, HIGH);
+    
+    // send end of Packet bye
+    if(_SerialTx)
+    {
+        if(_SerialMonitorMode) //send to serial monitor
+        {
+            Serial.print((char)ESC_CHAR);
+            Serial.println((char)END_PCKT);
+        }
+        else     //send to UI
+        {
+            Serial.print((char)ESC_CHAR);
+            Serial.print((char)END_PCKT);
+        }
+        
+    }        
+}
+
+void ArduEye::endFrame()
+{
+    //send End of Data Indicator to ArduEye
     digitalWrite(_chipSelectPin, LOW);
     SPI.transfer(ESC_CHAR);
     SPI.transfer(WRITE_CHAR);
@@ -361,7 +533,7 @@ void ArduEye::getData()
     SPI.transfer(END_PCKT);   
     digitalWrite(_chipSelectPin, HIGH);
     
-    // send End of Frame Indicator
+    // send End of Frame Indicator to UI
     if((_NumActiveSets > 0) && _SerialTx && !_SerialMonitorMode)
     {
         Serial.print((char)ESC_CHAR);
@@ -375,6 +547,13 @@ void ArduEye::getData()
 // check data ready pin to see if ArduEye Data is ready
 // dataRdy() must be called before getData()
 boolean ArduEye::dataRdy()
+{
+	return (digitalRead(_dataReadyPin) == HIGH);
+}
+
+// check data ready pin to see if ArduEye is booted
+// sensorRdy() must be called before sending any intialization cmds
+boolean ArduEye::sensorRdy()
 {
 	return (digitalRead(_dataReadyPin) == HIGH);
 }
@@ -400,15 +579,7 @@ void ArduEye::setOFResolution(int rows, int cols)
 	char Cmd[2] = {rows,cols};
 	sendCommand(CMD_OF_RESOLUTION, Cmd, 2);
 }
-// change the smoothing rate for the optic flow calculation
-// depending on the sensor read speed, optic flow smoothing
-// can provide a less noisy result
-void ArduEye::setOFSmoothing(float level)
-{
-	char Cmd[1];
-	Cmd[0] = 100/level;
-	sendCommand(CMD_OF_SMOOTHING, Cmd, 1);
-}
+
 // send a user defined command to the ArduEye
 //
 void ArduEye::sendCommand(char Cmd, char * Value, int Size)
@@ -443,20 +614,6 @@ void ArduEye::sendCommand(char Cmd, char * Value, int Size)
 	
 }
 
-// retrieve FPS value from dataset
-//
-short ArduEye::FPS()
-{
-	  short fps;
-	  for (int i = 0; i < MAX_DATASETS; i++)
-	  {   
-	    if(_DS[i].DSID == ARDUEYE_ID_FPS)
-	    {
-			fps = (_DS[i].Array[0] << 8) + _DS[i].Array[1];
-			return fps;
-		}	
-	  }
-}
 
 // check for communication from UI and pass commands on to ArduEye
 bool ArduEye::checkUIData(void)
@@ -506,7 +663,7 @@ bool ArduEye::checkUIData(void)
                     
                     break;
                 case END_PCKT:
-                    ParseCmd(_InSIdx, FrameIdx + i);
+                    parseCmd(_InSIdx, FrameIdx + i);
                     break;
                 case ACK_CHAR:
                     AckReceived = true;
@@ -525,7 +682,7 @@ bool ArduEye::checkUIData(void)
     return AckReceived;
 }
 
-void ArduEye::ParseCmd(int StartIdx, int EndIdx)
+void ArduEye::parseCmd(int StartIdx, int EndIdx)
 {
 	int i, Idx = 0;
     char cmd[MAX_CMD_SIZE];
@@ -581,7 +738,7 @@ void ArduEye::setSerialMonitorMode(boolean Enable)
 	_SerialMonitorMode = Enable;
 }
 
-void ArduEye::SetDisplayType(int DSID, int DisplayType)
+void ArduEye::setDisplayType(int DSID, int DisplayType)
 {
     for (int i = 0; i < MAX_DATASETS; i++)
     {   
