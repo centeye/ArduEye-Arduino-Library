@@ -46,6 +46,7 @@ ArduEye::ArduEye()
     _ESCReceived = false;
     _BufEnd = 0;
     Toggle = Toggle2 = false;
+	_TemporaryDataSet = NULL_CHAR;
 }
 
 /*---------------------------------------------------
@@ -194,6 +195,7 @@ boolean ArduEye::checkBufferFull()
     int BytesReceived = 0;
     int Count = 0, CycleCount = 0;
     char inByte;
+	unsigned long elapsedTime = millis();
     
     // Send GO_CHAR up to 50 times if no ACK is received
     while((Count < 50) && (CycleCount < 10))
@@ -204,7 +206,15 @@ boolean ArduEye::checkBufferFull()
         
         // wait until serial data is received
         while(BytesReceived == 0)
+		{
             BytesReceived = Serial.available();
+			if(millis() - elapsedTime > ACK_TIMEOUT)
+			{
+				// if no ack has be received, turn off serial communication and return false
+				_SerialTx = false;
+				return false;
+			}
+		}
     
         // process incoming bytes (checkUIData returns true if an ACK_CHAR is received)
         // return true if ACK_CHAR received
@@ -430,6 +440,14 @@ void ArduEye::getData()
   } 
   // when all datasets are received, call end of frame  
   endFrame();
+  
+  // clear TemporaryDatSet if active
+  if(_TemporaryDataSet >= 0)
+  {	
+	stopDataStream(_TemporaryDataSet);
+	_TemporaryDataSet = NULL_CHAR;
+	}
+	
 }
 /*---------------------------------------------------
  getDisplayType : read display type from DSRecord struct
@@ -662,16 +680,7 @@ void ArduEye::getDataSet(char DataSet, char *Buf)
 void ArduEye::endFrame()
 {
     //send End of Data Indicator to ArduEye
-    digitalWrite(_chipSelectPin, LOW);
-    SPI.transfer(ESC_CHAR);
-    SPI.transfer(WRITE_CHAR);
-    
-    SPI.transfer(ESC_CHAR);
-    SPI.transfer(START_PCKT);
-    SPI.transfer(END_FRAME);
-    SPI.transfer(ESC_CHAR);
-    SPI.transfer(END_PCKT);   
-    digitalWrite(_chipSelectPin, HIGH);
+    sendCommand(END_FRAME);
     
     // send End of Frame Indicator to UI
     if((_NumActiveSets > 0) && _SerialTx && !_SerialMonitorMode)
@@ -912,6 +921,17 @@ void ArduEye::parseCmd(int StartIdx, int EndIdx)
             Serial.println("  cmd sent");
           }
           break;
+	  // read command values.  These are one time requests, not subscriptions
+	  // currently there is only one non-subscription dataset (the command values
+	  // so the command is hard coded.  If more temporary sets are required a new command
+	  // structure is needed here and from the UI
+	  case READ_CMD:
+		//set flag to clear temporary dataset after one transmission
+		// this flag does nothing in embedded mode
+		 _TemporaryDataSet = ARDUEYE_ID_CMD;
+		 // request cmds dataset
+		 startDataStream(ARDUEYE_ID_CMD);
+		 break;
         // start or stop serial txmission
         // when serial txmission is on, all acquired datasets will be send out via serial.
         case SERIAL_START:

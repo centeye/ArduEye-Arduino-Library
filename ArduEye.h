@@ -41,12 +41,16 @@
 #define WRITE_CMD  32
 #define DISPLAY_CMD 33
 #define STOP_CMD 35
+#define READ_CMD 40
 #define SERIAL_START 39
 
 // flow control byte definitions
 #define ACK_CHAR 34
 #define GO_CHAR 36
 #define CMD_ACK 37
+
+// timeout on waiting for ack in milliseconds
+#define ACK_TIMEOUT 1000
 
 // special bytes - comm packet flags (SPI & Serial)
 #define ESC_CHAR	  38
@@ -60,11 +64,13 @@
 #define SOD_CHAR      95
 #define SOH_CHAR      96
 
+// special bytes - NULL character	
+#define NULL_CHAR -1
+
 // max array sizes (Arduino pro mini has 1kB SRAM)
 #define MAX_SPI_PCKT_SIZE   512
 #define MAX_IN_SERIAL	40
 #define MAX_CMD_SIZE    10
-
 
 // Display Commands
 #define DISPLAY_NONE  0
@@ -129,7 +135,7 @@ public:
     // set OpticFlow Resolution (Valid options are sensor dependent, see .h file)
 	void setOFResolution(int rows, int cols);
     // generic send command fucntion.  Size paramater is the length of the Value Array
-	void sendCommand(char Cmd, char * Value, int Size);
+	void sendCommand(char Cmd, char * Value = 0, int Size = 0);
     
     // Set Display Type associate with a particular dataset.  This type will be used in Tx to the UI
     // The UI reads the Display Type variable to know how to display data
@@ -176,6 +182,8 @@ private:
     char _ActiveSets[MAX_DATASETS];
         // number of active sets
     int _NumActiveSets;
+	// Flag to process single request dataset
+	int _TemporaryDataSet;
     
     //COMMUNICATIONS
     // io pins
